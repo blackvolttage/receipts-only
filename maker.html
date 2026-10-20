@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Receipts Only Printer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root { --red: #e2382b; --paper: #fbfaf5; --ink: #161514; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--red); color: var(--ink); font: 400 15px/1.5 "IBM Plex Mono", ui-monospace, monospace; }
+  .wrap { max-width: 520px; margin: 0 auto; padding: 20px 16px 48px; }
+  .slip { background: var(--paper); padding: 22px 18px; }
+  h1 { font: 400 26px/1.1 "Archivo Black", sans-serif; margin: 0 0 6px; }
+  p { margin: 0 0 12px; }
+  button { font: inherit; width: 100%; height: 50px; border: 0; background: var(--ink); color: var(--paper); font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .5; }
+  #status { margin-top: 10px; min-height: 1.5em; }
+  canvas, video { width: 100%; max-width: 300px; display: block; margin: 14px auto 0; aspect-ratio: 9 / 16; background: #000; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="slip">
+    <h1>Receipts Only printer</h1>
+    <p>This page makes the videos. The automation runs it on a schedule. You can also tap below to preview a video from your newest finds.</p>
+    <button id="go" type="button">Make a preview video</button>
+    <div id="status" aria-live="polite"></div>
+    <canvas id="cv" width="1080" height="1920" hidden></canvas>
+    <video id="out" controls playsinline hidden></video>
+  </div>
+</div>
+<script>
+(function () {
+  'use strict';
+  var W = 1080, H = 1920, FPS = 30;
+  var TTS_URL = 'https://cdn.jsdelivr.net/npm/@diffusionstudio/vits-web@1.0.3/+esm';
+  var RED = '#e2382b', PAPER = '#fbfaf5', INK = '#161514', FADED = '#8a857c';
+  var MONO = '"IBM Plex Mono", ui-monospace, monospace', BLACK = '"Archivo Black", Impact, sans-serif';
+  var cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+
+  /* ---------- helpers ---------- */
+  function ease(t) { t = Math.max(0, Math.min(1, t)); return 1 - Math.pow(1 - t, 3); }
+  function back(t) { t = Math.max(0, Math.min(1, t)); var c = 1.7; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); }
+  function pad(n) { return n < 10 ? '0' + n : String(n); }
+  function money(n) { return '$' + n.toFixed(2); }
+  function priceNum(p) { var m = String(p || '').replace(/,/g, '').match(/\d+(\.\d+)?/); return m ? parseFloat(m[0]) : NaN; }
+  function sayMoney(text) {
+    return String(text).replace(/\$\s?(\d+)(?:\.(\d{1,2}))?/g, function (m, d, c) {
+      var cents = c ? parseInt(c.length === 1 ? c + '0' : c, 10) : 0;
+      return d + (d === '1' ? ' dollar' : ' dollars') + (cents ? ' ' + cents : '');
+    });
+  }
+  function timeout(p, ms, what) {
+    return new Promise(function (ok, no) {
+      var t = setTimeout(function () { no(new Error(what + ' took too long')); }, ms);
+      p.then(function (v) { clearTimeout(t); ok(v); }, function (e) { clearTimeout(t); no(e); });
+    });
+  }
+  function wrap(text, maxW, maxLines) {
+    var words = String(text).split(/\s+/), lines = [], cur = '';
+    for (var i = 0; i < words.length; i++) {
+      var test = cur ? cur + ' ' + words[i] : words[i];
+      if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = words[i]; } else cur = test;
+    }
+    if (cur) lines.push(cur);
+    if (lines.length > maxLines) { lines = lines.slice(0, maxLines); lines[maxLines - 1] = lines[maxLines - 1].replace(/\s*\S*$/, '') + '...'; }
+    return lines;
+  }
+  function fit(text, font, size, min, maxW, maxLines) {
+    var s = size, lines;
+    do { ctx.font = font.replace('{s}', s); lines = wrap(text, maxW, 99); s -= 4; } while (lines.length > maxLines && s >= min);
+    ctx.font = font.replace('{s}', s + 4);
+    return { lines: wrap(text, maxW, maxLines), size: s + 4 };
+  }
+  function cover(img, x, y, w, h, zoom) {
+    var s = Math.max(w / img.width, h / img.height) * zoom, iw = img.width * s, ih = img.height * s;
+    ctx.drawImage(img, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih);
+  }
+
+  /* ---------- receipt pieces ---------- */
+  var RX = 90, RW = 900;
+  function counter() {
+    ctx.fillStyle = RED; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(0,0,0,.06)';
+    for (var y = 0; y < H; y += 6) ctx.fillRect(0, y, W, 2);
+  }
+  function paper(y, h) {
+    var tooth = 18;
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,.28)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 18;
+    ctx.beginPath(); ctx.moveTo(RX, y);
+    for (var x = RX; x < RX + RW; x += tooth * 2) { ctx.lineTo(x + tooth, y - tooth); ctx.lineTo(Math.min(x + tooth * 2, RX + RW), y); }
+    ctx.lineTo(RX + RW, y + h);
+    for (var x2 = RX + RW; x2 > RX; x2 -= tooth * 2) { ctx.lineTo(x2 - tooth, y + h + tooth); ctx.lineTo(Math.max(x2 - tooth * 2, RX), y + h); }
+    ctx.closePath(); ctx.fillStyle = PAPER; ctx.fill();
+    ctx.restore();
+  }
+  function dashes(y) {
+    ctx.fillStyle = INK;
+    for (var x = RX + 50; x < RX + RW - 50; x += 24) ctx.fillRect(x, y, 14, 3);
+  }
+  function leaderLine(left, right, y, size) {
+    ctx.font = '400 ' + size + 'px ' + MONO; ctx.fillStyle = INK;
+    ctx.textAlign = 'left'; ctx.fillText(left, RX + 60, y);
+    ctx.textAlign = 'right'; ctx.fillText(right, RX + RW - 60, y);
+    var lw = ctx.measureText(left).width, rw = ctx.measureText(right).width;
+    ctx.textAlign = 'left'; ctx.fillStyle = FADED;
+    var dot = ctx.measureText('.').width, x = RX + 60 + lw + 14, end = RX + RW - 60 - rw - 14;
+    for (; x < end; x += dot * 1.6) ctx.fillText('.', x, y);
+  }
+  function barcode(seed, x, y, w, h) {
+    ctx.fillStyle = INK; var s = String(seed || 'receipts'), cx = x, i = 0;
+    while (cx < x + w) { var c = s.charCodeAt(i++ % s.length) + i; var bw = 2 + (c % 4) * 2; if (i % 2) ctx.fillRect(cx, y, bw, h); cx += bw + 3 + (c % 3); }
+  }
+  function stamp(text, cx, cy, size, rot, a, sc) {
+    ctx.save(); ctx.globalAlpha = a; ctx.translate(cx, cy); ctx.rotate(rot); ctx.scale(sc, sc);
+    ctx.font = '400 ' + size + 'px ' + BLACK; var tw = ctx.measureText(text).width, bw = tw + size * 0.9, bh = size * 1.45;
+    ctx.strokeStyle = RED; ctx.lineWidth = size * 0.09; ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
+    ctx.fillStyle = RED; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, 0, size * 0.04);
+    ctx.restore();
+  }
+  function header(y) {
+    ctx.fillStyle = INK; ctx.textAlign = 'center';
+    ctx.font = '400 62px ' + BLACK; ctx.fillText('RECEIPTS ONLY', W / 2, y);
+  }
+
+  /* ---------- scenes ---------- */
+  function drawIntro(seg, t) {
+    counter();
+    var a = ease(t / 0.5);
+    var ft = fit(seg.text.toUpperCase(), '400 {s}px ' + BLACK, 150, 88, W - 150, 5);
+    var lh = ft.size * 1.02, total = ft.lines.length * lh, y0 = 760 - total / 2 + ft.size * 0.8;
+    ctx.save(); ctx.fillStyle = PAPER; ctx.textAlign = 'center';
+    ft.lines.forEach(function (l, i) {
+      var la = ease((t - i * 0.12) / 0.4);
+      ctx.globalAlpha = la; ctx.fillText(l, W / 2, y0 + i * lh + (1 - la) * 40);
+    });
+    ctx.restore();
+    var py = H - 520 * ease((t - 0.3) / 0.7);
+    paper(py, 700); header(py + 120); dashes(py + 170);
+    ctx.font = '400 40px ' + MONO; ctx.fillStyle = INK; ctx.textAlign = 'center';
+    ctx.fillText(seg.count + ' ITEMS  /  PRINTING...', W / 2, py + 250);
+    void a;
+  }
+
+  function drawItem(seg, t) {
+    counter();
+    var rise = 1 - ease(t / 0.45);
+    var y = 150 + rise * 900;
+    paper(y, 1620);
+    header(y + 110);
+    ctx.font = '400 36px ' + MONO; ctx.fillStyle = INK; ctx.textAlign = 'center';
+    ctx.fillText('ITEM ' + pad(seg.pos) + ' OF ' + pad(seg.of), W / 2, y + 170);
+    dashes(y + 205);
+    var px = RX + 60, pw = RW - 120, ph = 760, py = y + 240;
+    ctx.save(); ctx.beginPath(); ctx.rect(px, py, pw, ph); ctx.clip();
+    if (seg.img) cover(seg.img, px, py, pw, ph, 1.02 + 0.06 * (t / seg.dur));
+    else { ctx.fillStyle = '#ece9e0'; ctx.fillRect(px, py, pw, ph); ctx.fillStyle = FADED; ctx.font = '400 40px ' + MONO; ctx.textAlign = 'center'; ctx.fillText('NO PHOTO', W / 2, py + ph / 2); }
+    ctx.restore();
+    var ly = py + ph + 80;
+    var nm = fit('1x ' + seg.name.toUpperCase(), '600 {s}px ' + MONO, 44, 34, RW - 120, 2);
+    ctx.fillStyle = INK; ctx.textAlign = 'left';
+    nm.lines.forEach(function (l, i) { ctx.fillText(l, RX + 60, ly + i * nm.size * 1.25); });
+    ly += (nm.lines.length - 1) * nm.size * 1.25 + 70;
+    if (seg.price) leaderLine('PRICE', seg.price, ly, 44);
+    dashes(ly + 40);
+    if (seg.subtotal != null) leaderLine('SUBTOTAL', money(seg.subtotal), ly + 110, 40);
+    barcode(seg.key, RX + 200, y + 1450, RW - 400, 70);
+    ctx.font = '400 32px ' + MONO; ctx.fillStyle = INK; ctx.textAlign = 'center';
+    ctx.fillText('LINK IN BIO', W / 2, y + 1575);
+    if (seg.price) {
+      var st = (t - 0.6) / 0.3;
+      if (st > 0) stamp(seg.price, RX + RW - 210, py + ph - 120, 92, -0.14, Math.min(1, st * 2), 1.5 - 0.5 * back(st));
+    }
+  }
+
+  function drawOutro(seg, t) {
+    counter();
+    var rise = 1 - ease(t / 0.5), y = 120 + rise * 900;
+    paper(y, 1660);
+    header(y + 110);
+    ctx.font = '400 34px ' + MONO; ctx.fillStyle = INK; ctx.textAlign = 'center';
+    ctx.fillText('THANK YOU FOR SHOPPING', W / 2, y + 168);
+    dashes(y + 205);
+    var ly = y + 280;
+    seg.lines.forEach(function (l, i) {
+      var la = ease((t - 0.3 - i * 0.12) / 0.3); if (la <= 0) return;
+      ctx.save(); ctx.globalAlpha = la;
+      leaderLine(l.name, l.price, ly + i * 70, 36);
+      ctx.restore();
+    });
+    ly += seg.lines.length * 70 + 10;
+    dashes(ly);
+    var ta = ease((t - 0.4 - seg.lines.length * 0.12) / 0.4);
+    ctx.save(); ctx.globalAlpha = ta;
+    ctx.font = '400 72px ' + BLACK; ctx.fillStyle = INK; ctx.textAlign = 'left'; ctx.fillText('TOTAL', RX + 60, ly + 110);
+    ctx.textAlign = 'right'; ctx.fillText(money(seg.total), RX + RW - 60, ly + 110);
+    ctx.restore();
+    ly += 200;
+    ctx.save(); ctx.globalAlpha = ta; ctx.fillStyle = INK; ctx.textAlign = 'center';
+    if (seg.site) { var sf = fit(seg.site, '600 {s}px ' + MONO, 44, 28, RW - 120, 1); ctx.fillText(sf.lines[0], W / 2, ly); ly += 80; }
+    if (seg.offer) { var of = fit(seg.offer, '400 {s}px ' + MONO, 34, 26, RW - 140, 3); of.lines.forEach(function (l, i) { ctx.fillText(l, W / 2, ly + i * of.size * 1.3); }); }
+    ctx.restore();
+    barcode('total' + seg.total, RX + 200, y + 1490, RW - 400, 70);
+    var st = (t - 1.0 - seg.lines.length * 0.12) / 0.35;
+    if (st > 0) stamp('LINK IN BIO', W / 2, y + 1320, 84, -0.1, Math.min(1, st * 2), 1.5 - 0.5 * back(st));
+  }
+  function drawSeg(seg, t) { if (seg.kind === 'intro') drawIntro(seg, t); else if (seg.kind === 'item') drawItem(seg, t); else drawOutro(seg, t); }
+
+  /* ---------- assets ---------- */
+  function tryImg(u) {
+    return new Promise(function (res) {
+      var i = new Image(); i.crossOrigin = 'anonymous'; i.referrerPolicy = 'no-referrer';
+      var t = setTimeout(function () { res(null); }, 20000);
+      i.onload = function () {
+        clearTimeout(t);
+        try { var c = document.createElement('canvas'); c.width = c.height = 2; var x = c.getContext('2d'); x.drawImage(i, 0, 0, 2, 2); x.getImageData(0, 0, 1, 1); res(i); } catch (e) { res(null); }
+      };
+      i.onerror = function () { clearTimeout(t); res(null); };
+      i.src = u;
+    });
+  }
+  function loadImg(u) {
+    if (!u) return Promise.resolve(null);
+    return tryImg(u).then(function (i) { return i || tryImg('https://wsrv.nl/?url=' + encodeURIComponent(u) + '&w=1080&output=jpg'); });
+  }
+  var ttsMod = null;
+  function getTts() { return ttsMod ? Promise.resolve(ttsMod) : import(TTS_URL).then(function (m) { ttsMod = m; return m; }); }
+  function makeVoice(segs, voiceId, ac, log) {
+    return timeout(getTts(), 60000, 'Loading the voice').then(function (tts) {
+      return timeout(tts.stored(), 15000, 'Checking the voice').catch(function () { return []; }).then(function (have) {
+        if (have.indexOf(voiceId) >= 0) return;
+        log('Downloading voice...');
+        return timeout(tts.download(voiceId, function () {}), 240000, 'Downloading the voice');
+      }).then(function () {
+        var chain = Promise.resolve();
+        segs.forEach(function (s, i) {
+          chain = chain.then(function () {
+            log('Voice ' + (i + 1) + ' of ' + segs.length);
+            return timeout(tts.predict({ text: s.say, voiceId: voiceId }), 120000, 'Making the voice')
+              .then(function (w) { return w.arrayBuffer(); })
+              .then(function (ab) { return new Promise(function (ok, no) { ac.decodeAudioData(ab, ok, no); }); })
+              .then(function (buf) { s.audio = buf; });
+          });
+        });
+        return chain;
+      });
+    });
+  }
+  function pickMime(prefs) {
+    var opts = (prefs || []).concat(['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']);
+    for (var i = 0; i < opts.length; i++) if (MediaRecorder.isTypeSupported(opts[i])) return opts[i];
+    return '';
+  }
+
+  /* ---------- the job ---------- */
+  // job = { title, items:[{key,name,price,img}], outro, site, offer, voice, mimePrefs }
+  window.renderJob = function (job, log) {
+    log = log || function () {};
+    var AC = window.AudioContext || window.webkitAudioContext, ac = new AC();
+    if (ac.state === 'suspended') ac.resume();
+    var items = job.items || [], running = 0, segs = [];
+    segs.push({ kind: 'intro', text: job.title, count: items.length, say: sayMoney(job.title) });
+    items.forEach(function (it, i) {
+      var p = priceNum(it.price); if (!isNaN(p)) running += p;
+      segs.push({ kind: 'item', key: it.key, name: it.name, price: it.price, pos: i + 1, of: items.length, subtotal: running || null,
+                  src: it.img, say: 'Item ' + (i + 1) + '. ' + it.name + '. ' + (it.price ? sayMoney(it.price) + '.' : '') });
+    });
+    segs.push({ kind: 'outro', total: running, site: job.site || '', offer: job.offer || '',
+                lines: items.map(function (it) { var n = it.name.toUpperCase(); return { name: n.length > 18 ? n.slice(0, 17) + '.' : n, price: it.price || '' }; }),
+                say: sayMoney(job.outro || 'That is the whole receipt. Links in bio.') });
+    var voiceError = '';
+    return Promise.all([
+      document.fonts ? timeout(Promise.all([document.fonts.load('400 80px "Archivo Black"'), document.fonts.load('400 40px "IBM Plex Mono"'), document.fonts.load('600 40px "IBM Plex Mono"')]), 10000, 'Fonts').catch(function () {}) : null,
+      Promise.all(segs.map(function (s) { return s.kind === 'item' ? loadImg(s.src).then(function (im) { s.img = im; }) : null; }))
+    ]).then(function () {
+      if (!job.voice) return;
+      return makeVoice(segs, job.voice, ac, log).catch(function (e) { voiceError = String(e && e.message || e); segs.forEach(function (s) { s.audio = null; }); });
+    }).then(function () {
+      var t = 0;
+      segs.forEach(function (s) {
+        var min = s.kind === 'intro' ? 2.2 : s.kind === 'item' ? 2.8 : 4.0;
+        s.dur = Math.max(min, s.audio ? s.audio.duration + 0.5 : 0); s.start = t; t += s.dur;
+      });
+      return record(segs, t, ac, job.mimePrefs, log);
+    }).then(function (r) { r.voice = !voiceError && !!job.voice; r.voiceError = voiceError; return r; });
+  };
+
+  function record(segs, total, ac, prefs, log) {
+    return new Promise(function (resolve, reject) {
+      drawSeg(segs[0], 0);
+      var stream = cv.captureStream(FPS), dest = null;
+      if (segs.some(function (s) { return s.audio; })) { dest = ac.createMediaStreamDestination(); dest.stream.getAudioTracks().forEach(function (tr) { stream.addTrack(tr); }); }
+      var mime = pickMime(prefs), chunks = [], rec;
+      try { rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 8000000 } : undefined); } catch (e) { reject(e); return; }
+      rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+      rec.onstop = function () {
+        var type = (rec.mimeType || mime || 'video/webm').split(';')[0], blob = new Blob(chunks, { type: type });
+        var fr = new FileReader();
+        fr.onload = function () { resolve({ b64: String(fr.result).split(',')[1], mime: type, seconds: total, blob: blob }); };
+        fr.onerror = function () { reject(new Error('Could not read the video')); };
+        fr.readAsDataURL(blob);
+      };
+      rec.start(500);
+      var t0 = ac.currentTime + 0.25;
+      if (dest) segs.forEach(function (s) { if (!s.audio) return; var src = ac.createBufferSource(); src.buffer = s.audio; src.connect(dest); src.start(t0 + s.start + 0.15); });
+      var stopped = false;
+      (function frame() {
+        if (stopped) return;
+        var now = Math.max(0, ac.currentTime - t0);
+        if (now >= total) {
+          stopped = true; drawSeg(segs[segs.length - 1], segs[segs.length - 1].dur);
+          setTimeout(function () { rec.stop(); stream.getTracks().forEach(function (tr) { tr.stop(); }); try { ac.close(); } catch (x) {} }, 300);
+          return;
+        }
+        var seg = segs[0];
+        for (var i = segs.length - 1; i >= 0; i--) if (now >= segs[i].start) { seg = segs[i]; break; }
+        drawSeg(seg, now - seg.start);
+        log('Recording ' + Math.floor(now) + 's of ' + Math.ceil(total) + 's');
+        setTimeout(function () { requestAnimationFrame(frame); }, 0);
+      })();
+    });
+  }
+
+  /* ---------- preview button (for people, not the robot) ---------- */
+  function parseCsv(text) {
+    var rows = [], row = [], cur = '', q = false; text = text.replace(/^﻿/, '');
+    for (var i = 0; i < text.length; i++) {
+      var c = text[i];
+      if (q) { if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+      else if (c === '"') q = true; else if (c === ',') { row.push(cur); cur = ''; }
+      else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cur); rows.push(row); row = []; cur = ''; }
+      else cur += c;
+    }
+    if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+    return rows;
+  }
+  var go = document.getElementById('go'), st = document.getElementById('status');
+  go.addEventListener('click', function () {
+    go.disabled = true; st.textContent = 'Loading finds...';
+    fetch('config.json', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (cfg) {
+      return fetch(cfg.CSV_URL, { cache: 'no-store' }).then(function (r) { return r.text(); }).then(function (t) {
+        var rows = parseCsv(t), h = rows[0].map(function (x) { return x.trim().toLowerCase(); });
+        var ix = function (n) { return h.indexOf(n); }, items = [];
+        for (var i = rows.length - 1; i >= 1 && items.length < (cfg.ITEMS_PER_VIDEO || 5); i--) {
+          var r = rows[i], name = (r[ix('item')] || '').trim(); if (!name) continue;
+          items.push({ key: (r[ix('platform')] || '') + '-' + (r[ix('item id')] || i), name: name.length > 34 ? name.slice(0, 34).replace(/\s+\S*$/, '') : name, price: (r[ix('price')] || '').trim(), img: (r[ix('image url')] || '').trim() });
+        }
+        cv.hidden = false;
+        return window.renderJob({ title: items.length + ' finds, one receipt', items: items, outro: 'That is the whole receipt. Links in bio.', site: cfg.STORE_URL, offer: cfg.SIGNUP_OFFER, voice: cfg.VOICE },
+          function (m) { st.textContent = m; });
+      });
+    }).then(function (r) {
+      cv.hidden = true; var v = document.getElementById('out'); v.src = URL.createObjectURL(r.blob); v.hidden = false;
+      st.textContent = 'Done' + (r.voiceError ? ' (no voice: ' + r.voiceError + ')' : '') + '. This is a preview only; nothing was posted.';
+      go.disabled = false;
+    }).catch(function (e) { st.textContent = 'Could not make the preview: ' + (e && e.message || e); go.disabled = false; });
+  });
+})();
+</script>
+</body>
+</html>

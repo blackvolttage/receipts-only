@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Receipts Only</title>
+<meta name="description" content="Cheap finds on Oopbuy with the receipts: photos, prices and direct links.">
+<meta name="theme-color" content="#e2382b">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --red: #e2382b; --red-dark: #b8291f; --paper: #fbfaf5; --ink: #161514; --faded: #77726a;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace; --black: "Archivo Black", Impact, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--red); color: var(--ink); font: 400 15px/1.5 var(--mono); -webkit-font-smoothing: antialiased;
+         background-image: repeating-linear-gradient(0deg, rgba(0,0,0,.05) 0 2px, transparent 2px 6px); }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  a { color: inherit; }
+  :focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
+
+  /* torn paper edge */
+  .slip { background: var(--paper); position: relative; }
+  .slip::before, .slip::after { content: ""; position: absolute; left: 0; right: 0; height: 10px;
+    background: linear-gradient(-45deg, transparent 7px, var(--paper) 0) 0 0 / 14px 10px repeat-x, linear-gradient(45deg, transparent 7px, var(--paper) 0) 0 0 / 14px 10px repeat-x; }
+  .slip::before { top: -10px; transform: scaleY(-1); }
+  .slip::after { bottom: -10px; }
+
+  header.top { padding: 36px 0 24px; }
+  .head { max-width: 560px; margin: 0 auto; padding: 26px 22px 22px; text-align: center; box-shadow: 0 18px 40px rgba(0,0,0,.25); }
+  .head h1 { font: 400 clamp(40px, 11vw, 64px)/.95 var(--black); margin: 0; letter-spacing: -.01em; }
+  .head .sub { margin: 10px 0 0; }
+  .rule { border: 0; border-top: 2px dashed var(--ink); margin: 16px 0; }
+  .head .meta { display: flex; justify-content: space-between; font-size: 13px; }
+  .signup { display: block; margin-top: 14px; background: var(--ink); color: var(--paper); text-decoration: none; padding: 12px; font-weight: 600; }
+  .signup:hover { background: var(--red-dark); }
+
+  .tools { position: sticky; top: 0; z-index: 4; background: var(--red); padding: 12px 0 10px; }
+  .tool-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .search { flex: 1 1 240px; display: flex; align-items: center; background: var(--paper); padding: 0 12px; height: 46px; }
+  .search span { font-weight: 600; margin-right: 8px; }
+  .search input { flex: 1; min-width: 0; border: 0; background: none; outline: none; font-size: 16px; height: 100%; }
+  .search button { background: none; border: 0; font-size: 20px; padding: 0 4px; }
+  select.sort { height: 46px; background: var(--paper); border: 0; padding: 0 10px; }
+  .cats { display: flex; gap: 8px; overflow-x: auto; padding-top: 10px; scrollbar-width: none; }
+  .cats::-webkit-scrollbar { display: none; }
+  .cats button { flex: none; height: 36px; padding: 0 12px; border: 2px solid var(--paper); background: none; color: var(--paper); font-weight: 600; white-space: nowrap; }
+  .cats button[aria-pressed="true"] { background: var(--paper); color: var(--ink); }
+
+  main { padding: 18px 0 64px; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 30px 14px; }
+  @media (min-width: 760px) { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px 24px; } }
+  @media (min-width: 1000px) { .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  .stub { display: block; width: 100%; border: 0; padding: 12px 12px 14px; text-align: left; box-shadow: 0 10px 24px rgba(0,0,0,.22); transition: transform .15s; }
+  .stub:nth-child(odd) { transform: rotate(-.6deg); }
+  .stub:nth-child(even) { transform: rotate(.5deg); }
+  .stub:hover, .stub:focus-visible { transform: rotate(0) translateY(-3px); }
+  .stub .no { display: flex; justify-content: space-between; font-size: 12px; color: var(--faded); }
+  .photo { aspect-ratio: 1; background: #ece9e0; margin: 8px 0 10px; overflow: hidden; display: grid; place-items: center; }
+  .photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .photo .none { color: var(--faded); font-size: 13px; }
+  .nm { font-weight: 600; font-size: 14px; line-height: 1.3; margin: 0; text-transform: uppercase;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.6em; }
+  .line { display: flex; align-items: baseline; gap: 6px; margin-top: 6px; font-size: 14px; }
+  .line .dots { flex: 1; border-bottom: 2px dotted var(--faded); transform: translateY(-4px); }
+  .line b { font: 400 18px var(--black); }
+  .bars { height: 22px; margin-top: 10px; background: repeating-linear-gradient(90deg, var(--ink) 0 2px, transparent 2px 5px, var(--ink) 5px 9px, transparent 9px 11px, var(--ink) 11px 12px, transparent 12px 16px); opacity: .85; }
+
+  .state { text-align: center; padding: 30px 20px; max-width: 460px; margin: 30px auto; }
+  .state h2 { font: 400 24px/1.2 var(--black); margin: 0 0 6px; }
+  .state button { margin-top: 14px; height: 42px; padding: 0 16px; border: 2px solid var(--ink); background: none; font-weight: 600; }
+
+  dialog.view { border: 0; padding: 0; background: none; width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow: visible; }
+  dialog.view::backdrop { background: rgba(22,21,20,.7); }
+  dialog.view[open] .slip { animation: print .35s ease-out; }
+  @keyframes print { from { transform: translateY(40px); opacity: 0; } }
+  .v-in { padding: 18px 20px 22px; max-height: calc(100dvh - 60px); overflow-y: auto; }
+  .v-top { display: flex; justify-content: space-between; align-items: center; }
+  .v-top b { font: 400 22px var(--black); }
+  .x { width: 40px; height: 40px; border: 2px solid var(--ink); background: none; font-size: 22px; line-height: 1; }
+  .v-photo { aspect-ratio: 1; background: #ece9e0; margin: 12px 0; display: grid; place-items: center; }
+  .v-photo img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .v-name { font-weight: 600; text-transform: uppercase; font-size: 17px; margin: 0; overflow-wrap: anywhere; }
+  .v-price { display: flex; align-items: baseline; gap: 8px; margin-top: 10px; }
+  .v-price .dots { flex: 1; border-bottom: 2px dotted var(--faded); transform: translateY(-6px); }
+  .v-price b { font: 400 34px var(--black); }
+  .v-note { color: var(--faded); font-size: 13px; margin: 6px 0 0; }
+  .buy { display: flex; align-items: center; justify-content: center; height: 54px; margin-top: 16px; background: var(--red); color: var(--paper); text-decoration: none; font: 400 20px var(--black); }
+  .buy:hover { background: var(--red-dark); }
+  .copy { width: 100%; height: 44px; margin-top: 10px; border: 2px solid var(--ink); background: none; font-weight: 600; }
+  .v-sign { display: block; text-align: center; margin-top: 12px; font-size: 13px; }
+
+  footer { padding: 10px 0 60px; }
+  footer .slip { max-width: 560px; margin: 0 auto; padding: 18px 22px; font-size: 13px; }
+  footer p { margin: 0 0 6px; }
+  [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: reduce) { .stub, dialog.view[open] .slip { transition: none; animation: none; } }
+</style>
+</head>
+<body>
+
+<header class="top wrap">
+  <div class="head slip">
+    <h1>RECEIPTS ONLY</h1>
+    <p class="sub">Cheap finds on Oopbuy. Every price on the receipt.</p>
+    <hr class="rule">
+    <div class="meta"><span id="date"></span><span id="count"></span></div>
+    <a class="signup" id="signup" target="_blank" rel="noopener sponsored" hidden></a>
+  </div>
+</header>
+
+<div class="tools">
+  <div class="wrap">
+    <div class="tool-row">
+      <label class="search"><span aria-hidden="true">&gt;</span>
+        <input id="q" type="search" placeholder="search the receipts" autocomplete="off" aria-label="Search finds">
+        <button id="clear" type="button" aria-label="Clear search" hidden>&times;</button>
+      </label>
+      <select class="sort" id="sort" aria-label="Sort">
+        <option value="new">Newest</option>
+        <option value="low">Cheapest</option>
+        <option value="high">Priciest</option>
+      </select>
+    </div>
+    <nav class="cats" id="cats" aria-label="Categories"></nav>
+  </div>
+</div>
+
+<main class="wrap">
+  <div class="grid" id="grid"></div>
+  <div class="state slip" id="state" hidden></div>
+</main>
+
+<footer class="wrap">
+  <div class="slip">
+    <p>Items are sold and shipped by third-party sellers through Oopbuy. This site does not sell or ship anything.</p>
+    <p>Links here are affiliate links. I may earn a commission when you sign up or buy, at no extra cost to you.</p>
+    <p>Prices are from when each find was added and can change on Oopbuy.</p>
+  </div>
+</footer>
+
+<dialog class="view" id="view" aria-labelledby="vName">
+  <div class="slip"><div class="v-in">
+    <div class="v-top"><b>RECEIPTS ONLY</b><button class="x" id="vClose" type="button" aria-label="Close">&times;</button></div>
+    <div class="v-photo" id="vPhoto"></div>
+    <p class="v-name" id="vName"></p>
+    <div class="v-price"><span>PRICE</span><span class="dots"></span><b id="vPrice"></b></div>
+    <p class="v-note">Pick size, color and shipping on Oopbuy.</p>
+    <a class="buy" id="vBuy" target="_blank" rel="noopener sponsored">BUY ON OOPBUY</a>
+    <button class="copy" id="vCopy" type="button">Copy link to this find</button>
+    <a class="v-sign" id="vSign" target="_blank" rel="noopener sponsored" hidden></a>
+  </div></div>
+</dialog>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var cfg = {}, state = { items: [], cat: 'All', q: '', sort: 'new' };
+
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function safeUrl(u) { u = String(u || '').trim(); return /^https?:\/\//i.test(u) ? u : ''; }
+  function priceNum(p) { var m = String(p || '').replace(/,/g, '').match(/\d+(\.\d+)?/); return m ? parseFloat(m[0]) : NaN; }
+  function pad(n) { return n < 10 ? '00' + n : n < 100 ? '0' + n : String(n); }
+  function isOopbuy(u) { return /^https?:\/\/([\w-]+\.)*oopbuy\.com(\/|\?|#|$)/i.test(u); }
+  function code() { var c = String(cfg.INVITE_CODE || ''); return /PASTE/i.test(c) ? '' : c; }
+  function recode(u) {
+    var c = code(); if (!u || !c || !isOopbuy(u)) return u;
+    c = encodeURIComponent(c);
+    var hash = '', h = u.indexOf('#'); if (h >= 0) { hash = u.slice(h); u = u.slice(0, h); }
+    u = u.replace(/([?&])(inviteCode|goodsInviteCode)=[^&]*/gi, function (m, s, k) { return s + k + '=' + c; });
+    if (!/[?&]inviteCode=/i.test(u)) u += (u.indexOf('?') < 0 ? '?' : '&') + 'inviteCode=' + c;
+    return u + hash;
+  }
+  function parseCsv(text) {
+    var rows = [], row = [], cur = '', q = false; text = text.replace(/^﻿/, '');
+    for (var i = 0; i < text.length; i++) {
+      var c = text[i];
+      if (q) { if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+      else if (c === '"') q = true; else if (c === ',') { row.push(cur); cur = ''; }
+      else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cur); rows.push(row); row = []; cur = ''; }
+      else cur += c;
+    }
+    if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+    return rows;
+  }
+  function toItems(rows) {
+    var head = (rows[0] || []).map(function (h) { return h.trim().toLowerCase(); }), c = function (n) { return head.indexOf(n); };
+    var ix = { name: c('item'), price: c('price'), cat: c('category'), img: c('image url'), link: c('affiliate link'), plat: c('platform'), id: c('item id'), added: c('added') };
+    if (ix.name < 0 || ix.link < 0) throw new Error('columns');
+    var out = [];
+    for (var i = 1; i < rows.length; i++) {
+      var r = rows[i], g = function (k) { return ix[k] >= 0 && r[ix[k]] != null ? String(r[ix[k]]).trim() : ''; };
+      var link = safeUrl(g('link')); if (!g('name') || !link) continue;
+      if (!isOopbuy(link) && /^[\w-]+$/.test(g('plat')) && /^[\w-]+$/.test(g('id'))) link = 'https://oopbuy.com/product/' + g('plat') + '/' + g('id') + '?inviteCode=x&goodsInviteCode=x&sourceChannel=41&idp=1';
+      out.push({ key: (g('plat') || 'item') + '-' + (g('id') || i), name: g('name'), price: g('price'), priceNum: priceNum(g('price')),
+                 cat: g('cat') || 'Other', img: safeUrl(g('img')), link: recode(link), added: Date.parse(g('added')) || 0, order: i });
+    }
+    return out;
+  }
+  function photo(url, alt, eager) {
+    if (!url) return el('span', 'none', 'NO PHOTO');
+    var img = document.createElement('img'); img.alt = alt; img.referrerPolicy = 'no-referrer'; img.decoding = 'async';
+    if (!eager) img.loading = 'lazy';
+    img.onerror = function () { img.replaceWith(el('span', 'none', 'NO PHOTO')); };
+    img.src = url; return img;
+  }
+
+  function visible() {
+    var q = state.q.trim().toLowerCase();
+    var list = state.items.filter(function (it) { return (state.cat === 'All' || it.cat === state.cat) && (!q || (it.name + ' ' + it.cat).toLowerCase().indexOf(q) >= 0); });
+    var byNew = function (a, b) { return (b.added - a.added) || (b.order - a.order); };
+    if (state.sort === 'new') list.sort(byNew);
+    else list.sort(function (a, b) {
+      var x = isNaN(a.priceNum) ? Infinity : a.priceNum, y = isNaN(b.priceNum) ? Infinity : b.priceNum;
+      if (x === y) return byNew(a, b); if (x === Infinity) return 1; if (y === Infinity) return -1;
+      return state.sort === 'low' ? x - y : y - x;
+    });
+    return list;
+  }
+  function renderCats() {
+    var counts = {}, names = [];
+    state.items.forEach(function (it) { if (!counts[it.cat]) { counts[it.cat] = 0; names.push(it.cat); } counts[it.cat]++; });
+    names.sort(function (a, b) { return a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b); });
+    if (names.indexOf(state.cat) < 0) state.cat = 'All';
+    var nav = $('cats'); nav.textContent = ''; nav.hidden = names.length < 2;
+    [['All', state.items.length]].concat(names.map(function (n) { return [n, counts[n]]; })).forEach(function (p) {
+      var b = el('button', '', p[0] + ' (' + p[1] + ')'); b.type = 'button'; b.setAttribute('aria-pressed', String(state.cat === p[0]));
+      b.addEventListener('click', function () { state.cat = p[0]; renderCats(); renderGrid(); }); nav.appendChild(b);
+    });
+  }
+  function stub(it, i) {
+    var b = el('button', 'stub slip'); b.type = 'button';
+    b.setAttribute('aria-label', it.name + (it.price ? ', ' + it.price : '') + '. Open');
+    var no = el('div', 'no'); no.appendChild(el('span', '', 'NO. ' + pad(i + 1))); no.appendChild(el('span', '', it.cat.toUpperCase()));
+    var ph = el('div', 'photo'); ph.appendChild(photo(it.img, '', i < 4));
+    var line = el('div', 'line'); line.appendChild(el('span', '', '1x')); line.appendChild(el('span', 'dots')); line.appendChild(el('b', '', it.price || '--'));
+    b.appendChild(no); b.appendChild(ph); b.appendChild(el('p', 'nm', it.name)); b.appendChild(line); b.appendChild(el('div', 'bars'));
+    b.addEventListener('click', function () { openView(it, true); });
+    return b;
+  }
+  function renderGrid() {
+    var g = $('grid'), list = visible(); g.textContent = ''; $('state').hidden = true;
+    $('count').textContent = state.items.length ? (list.length === state.items.length ? list.length + ' ITEMS' : list.length + '/' + state.items.length + ' ITEMS') : '';
+    if (!state.items.length) { showState('NO RECEIPTS YET', 'New finds print here as soon as they are added.'); return; }
+    if (!list.length) { showState('NOTHING MATCHES', 'Try a shorter word or another category.', 'Show all', function () { state.q = ''; state.cat = 'All'; $('q').value = ''; $('clear').hidden = true; renderCats(); renderGrid(); }); return; }
+    var f = document.createDocumentFragment(); list.forEach(function (it, i) { f.appendChild(stub(it, i)); }); g.appendChild(f);
+  }
+  function showState(t, x, btn, fn) {
+    var s = $('state'); s.textContent = ''; s.appendChild(el('h2', '', t)); s.appendChild(el('div', '', x));
+    if (btn) { var b = el('button', '', btn); b.type = 'button'; b.addEventListener('click', fn); s.appendChild(b); }
+    s.hidden = false;
+  }
+
+  var dlg = $('view'), current = null;
+  function openView(it, setHash) {
+    current = it;
+    var ph = $('vPhoto'); ph.textContent = ''; ph.appendChild(photo(it.img, it.name, true));
+    $('vName').textContent = '1x ' + it.name; $('vPrice').textContent = it.price || '--'; $('vBuy').href = it.link;
+    $('vCopy').textContent = 'Copy link to this find';
+    if (setHash) { try { history.replaceState(null, '', '#r=' + encodeURIComponent(it.key)); } catch (e) {} }
+    if (!dlg.open) dlg.showModal();
+  }
+  dlg.addEventListener('close', function () { current = null; try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {} });
+  dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });
+  $('vClose').addEventListener('click', function () { dlg.close(); });
+  $('vCopy').addEventListener('click', function () {
+    if (!current) return; var btn = this, url = location.origin + location.pathname + '#r=' + encodeURIComponent(current.key);
+    var done = function (ok) { btn.textContent = ok ? 'Link copied' : 'Copy it from the address bar'; };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(function () { done(true); }, function () { done(false); }); else done(false);
+  });
+  function openFromHash() {
+    var m = location.hash.match(/^#r=(.+)$/); if (!m) return; var key; try { key = decodeURIComponent(m[1]); } catch (e) { return; }
+    state.items.forEach(function (it) { if (it.key === key) openView(it, false); });
+  }
+
+  $('q').addEventListener('input', function () { state.q = this.value; $('clear').hidden = !this.value; renderGrid(); });
+  $('clear').addEventListener('click', function () { $('q').value = ''; state.q = ''; this.hidden = true; renderGrid(); $('q').focus(); });
+  $('sort').addEventListener('change', function () { state.sort = this.value; renderGrid(); });
+
+  $('date').textContent = new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+  fetch('config.json', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (c) {
+    cfg = c; document.title = cfg.BRAND || 'Receipts Only';
+    if (code() && cfg.SIGNUP_OFFER) {
+      var u = 'https://oopbuy.com/register?inviteCode=' + encodeURIComponent(code());
+      $('signup').href = u; $('signup').textContent = cfg.SIGNUP_OFFER; $('signup').hidden = false;
+      $('vSign').href = u; $('vSign').textContent = cfg.SIGNUP_OFFER; $('vSign').hidden = false;
+    }
+    return fetch(cfg.CSV_URL, { cache: 'no-store' });
+  }).then(function (r) { if (!r.ok) throw new Error('http'); return r.text(); }).then(function (t) {
+    if (/^\s*<(!doctype|html)/i.test(t)) throw new Error('not-csv');
+    state.items = toItems(parseCsv(t)); renderCats(); renderGrid(); openFromHash();
+  }).catch(function () { showState('RECEIPTS DID NOT LOAD', 'Check your connection, then try again.', 'Try again', function () { location.reload(); }); });
+})();
+</script>
+</body>
+</html>
