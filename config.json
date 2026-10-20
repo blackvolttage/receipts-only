@@ -1,8 +1,8 @@
 {
   "BRAND": "Receipts Only",
-  "INVITE_CODE": "PASTE_YOUR_CODE",
+  "INVITE_CODE": "P0YTP8PXY",
   "CSV_URL": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQb2qLIlJ6A-wtlddagJrEsg7IjK9UpQzz9RYmrcbEu_LeU_P9vapqnyTkSkQD5OAGFiy8NzsgOxsEo/pub?gid=0&single=true&output=csv",
-  "STORE_URL": "",
+  "STORE_URL": "https://blackvolttage.github.io/receipts-only/",
   "SIGNUP_OFFER": "New to Oopbuy? Sign up with my link for a new-user bonus",
   "TIMEZONE": "America/Los_Angeles",
   "POST_TIMES": ["07:10", "13:00", "17:00", "21:00"],
