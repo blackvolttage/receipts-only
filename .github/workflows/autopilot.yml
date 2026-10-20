@@ -1,0 +1,48 @@
+name: Autopilot
+
+on:
+  schedule:
+    - cron: "11 14,15 * * *"
+    - cron: "1 20,21 * * *"
+    - cron: "1 0,1 * * *"
+    - cron: "1 4,5 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "test = make a video without posting, post = post one now"
+        type: choice
+        options: [test, post]
+        default: test
+
+permissions:
+  contents: write
+
+concurrency:
+  group: autopilot
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install
+        working-directory: automation
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          sudo apt-get install -y ffmpeg > /dev/null
+
+      - name: Make and post
+        working-directory: automation
+        env:
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          FORCE: ${{ github.event_name ==
